@@ -1,4 +1,4 @@
-* mbed */
+/* mbed */
 #include "mbed.h"
 /* Lab9 RPC */
 #include "mbed_rpc.h"
