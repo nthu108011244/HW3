@@ -1,4 +1,4 @@
-/* mbed */
+* mbed */
 #include "mbed.h"
 /* Lab9 RPC */
 #include "mbed_rpc.h"
@@ -103,16 +103,7 @@ void detectionMode() {
    while (1) {
       if (if_detection_mode) {
          if_gesture_mode = 0;
-         led1_blink(100);
       }
-   }
-}
-void led1_blink(uint32_t peroid) {
-   for (int i = 1; i <= 5; i++) {
-      ThisThread::sleep_for(peroid);
-      led3 = 1;
-      ThisThread::sleep_for(peroid);
-      led3 = 0;
    }
 }
 void gestureMode_gestureVerify() {
@@ -257,19 +248,5 @@ int PredictGesture(float* output) {
   return this_predict;
 }
 void uLCDDisplay() {
-   if (!if_gesture_mode && )
-   uLCD.background_color(BLACK);
-   uLCD.cls();
-   uLCD.locate(0, 15);
-   uLCD.printf(" Down "); 
-   uLCD.locate(7, 15);
-   uLCD.printf("Select");
-   uLCD.locate(14, 15);
-   uLCD.printf(" Up "); 
-   uLCD.text_width(3);
-   uLCD.text_height(3);
-   uLCD.color(WHITE);
-   uLCD.textbackground_color(BLACK);
-   uLCD.locate(0, 2);
-   uLCD.printf("%4dHz", freqTable[freqMode]);
+   if (!if_gesture_mode) {}
 }
