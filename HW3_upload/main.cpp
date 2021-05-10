@@ -1,5 +1,9 @@
 /* mbed */
 #include "mbed.h"
+#include <iostream>
+#include <math.h>
+#define PI 3.14159265
+using namespace std;
 /* Lab9 RPC */
 #include "mbed_rpc.h"
 /* HW2 uLCD */
@@ -15,6 +19,8 @@
 #include "tensorflow/lite/schema/schema_generated.h"
 #include "tensorflow/lite/version.h"
 #include "accelerometer_handler.h"
+/* Lab10 MQTT & Accelerometer */
+#include "stm32l475e_iot01_accelero.h"
 
 
 ////////////////////////////////////////////////////////////
@@ -47,18 +53,23 @@ uLCD_4DGL uLCD(D1, D0, D2);
 /* ML variable */
 constexpr int kTensorArenaSize = 60 * 1024;
 uint8_t tensor_arena[kTensorArenaSize];
+////////////////////////////////////////////////////////////
+/* accelerometer variable */
+int16_t acc_data_XYZ[3] = {0};
 
 ////////////////////////////////////////////////////////////
-/* angel table */
-int thres_angel_mode = 0;
-int thres_angel_table[3] = {30, 45, 60};
+/* thres angle */
+#define thres_angle_mode_max 3
+int thres_angle_mode = 0;
+int thres_angle_table[thres_angle_mode_max] = {30, 45, 60};
 
 void readRPCCommand();
+void uLCDInit();
+void uLCDDisplay(double inform);
 void gestureMode();
 void gestureMode_gestureVerify();
 int  PredictGesture(float* output);
 void detectionMode();
-void led1_blink(uint32_t period);
 
 int main() {
    gesture_queue.call(&gestureMode);
@@ -73,7 +84,6 @@ void readRPCCommand() {
    FILE *devin = fdopen(&pc, "r");
    FILE *devout = fdopen(&pc, "w");
    
-
    while(1) {
       /* clear buffer */
       memset(buf, 0, 256);
@@ -91,18 +101,61 @@ void readRPCCommand() {
       printf("%s\r\n", outbuf);
    }
 }
+void uLCDInit() {
+   uLCD.background_color(BLACK);
+   uLCD.cls();
+   uLCD.text_width(3);
+   uLCD.text_height(3);
+}
+void uLCDDisplay(double inform) {
+   if (if_gesture_mode) {
+      uLCD.color(GREEN);
+      uLCD.locate(1, 1);
+      uLCD.printf("%d", int(inform));
+   }
+   else if (if_detection_mode) {
+      uLCD.color(BLUE);
+      uLCD.locate(1, 2);
+      uLCD.printf("%3.1lf", inform);
+   }
+}
 void gestureMode() {
    while (1) {
       if (if_gesture_mode) {
          if_detection_mode = 0;
+         uLCDInit();
          gestureMode_gestureVerify();
       }
    }
 }
 void detectionMode() {
+   bool acc_init = 0;
+   double acc_stanZ = 0;
+   double curr_angel;
+
    while (1) {
       if (if_detection_mode) {
          if_gesture_mode = 0;
+
+         if (!acc_init) {
+            acc_init = 1;
+            uLCDInit();
+            BSP_ACCELERO_Init();
+            for (int i = 1; i <= 10; i++) {
+               BSP_ACCELERO_AccGetXYZ(acc_data_XYZ);
+               acc_stanZ += acc_data_XYZ[2];
+            }
+            acc_stanZ /= 10;
+         }
+
+         BSP_ACCELERO_AccGetXYZ(acc_data_XYZ);
+         curr_angel = acos(acc_data_XYZ[2] / acc_stanZ) * 180 / PI;
+         uLCDDisplay(curr_angel);
+
+         ThisThread::sleep_for(1ms);
+      }
+      else {
+         acc_init = 0;
       }
    }
 }
@@ -202,11 +255,27 @@ void gestureMode_gestureVerify() {
 
     // Clear the buffer next time we read data
     should_clear_buffer = gesture_index < label_num;
-
+      
+      //change thres angle
+      if (gesture_index == 0) {
+         if (thres_angle_mode < thres_angle_mode_max - 1) thres_angle_mode++;
+         else thres_angle_mode = thres_angle_mode_max - 1;
+         cout << thres_angle_mode << endl;
+         uLCDDisplay(thres_angle_table[thres_angle_mode]);
+      }
+      else if (gesture_index == 1) {
+         if (thres_angle_mode > 0) thres_angle_mode--;
+         else thres_angle_mode = 0;
+         cout << thres_angle_mode << endl;
+         uLCDDisplay(thres_angle_table[thres_angle_mode]);
+      }
+      
     // Produce an output
     if (gesture_index < label_num) {
       error_reporter->Report(config.output_message[gesture_index]);
     }
+
+      
   }
 }
 int PredictGesture(float* output) {
@@ -246,7 +315,4 @@ int PredictGesture(float* output) {
   last_predict = -1;
 
   return this_predict;
-}
-void uLCDDisplay() {
-   if (!if_gesture_mode) {}
 }
