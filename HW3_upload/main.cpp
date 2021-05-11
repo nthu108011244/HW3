@@ -9,7 +9,7 @@ using namespace std;
 /* HW2 uLCD */
 #include "uLCD_4DGL.h"
 /* Lab8 ML */
-#include "config.h"
+#include "tfconfig.h"
 #include "magic_wand_model_data.h"
 #include "tensorflow/lite/c/common.h"
 #include "tensorflow/lite/micro/kernels/micro_ops.h"
@@ -21,17 +21,22 @@ using namespace std;
 #include "accelerometer_handler.h"
 /* Lab10 MQTT & Accelerometer */
 #include "stm32l475e_iot01_accelero.h"
+#include "MQTTNetwork.h"
+#include "MQTTmbed.h"
+#include "MQTTClient.h"
 
 
 ////////////////////////////////////////////////////////////
 /* Global Thread */
 Thread gesture_thread;
 Thread detection_thread;
+Thread mqtt_thread(osPriorityHigh);
 
 ////////////////////////////////////////////////////////////
 /* Global EventQueue */
 EventQueue gesture_queue;
 EventQueue detection_queue;
+EventQueue mqtt_queue;
 
 ////////////////////////////////////////////////////////////
 /* RPC variable */
@@ -56,6 +61,11 @@ uint8_t tensor_arena[kTensorArenaSize];
 ////////////////////////////////////////////////////////////
 /* accelerometer variable */
 int16_t acc_data_XYZ[3] = {0};
+
+////////////////////////////////////////////////////////////
+/* accelerometer variable */
+WiFiInterface *wifi;
+InterruptIn btn2(USER_BUTTON);
 
 ////////////////////////////////////////////////////////////
 /* thres angel */
@@ -155,17 +165,15 @@ void detectionMode() {
             for (int i = 1; i <= 10; i++) {
                BSP_ACCELERO_AccGetXYZ(acc_data_XYZ);
                acc_stanZ += acc_data_XYZ[2];
-               cout << "[test]: " << acc_stanZ << " " << i << endl;
             }
             acc_stanZ /= 10;
-            cout << "[test]: " << acc_stanZ << endl;
          }
 
          BSP_ACCELERO_AccGetXYZ(acc_data_XYZ);
          curr_angel = acos(acc_data_XYZ[2] / acc_stanZ) * 180 / PI;
          if (curr_angel >= thres_angle_table[thres_angle_mode]) thres_over_counter++;
          
-         //cout << "[Tilt Angle Detection Mode]: " << curr_angel << " (over thres angel: " << thres_over_counter << " times)" << endl;
+         cout << "[Tilt Angle Detection Mode]: " << curr_angel << " (over thres angel: " << thres_over_counter << " times)" << endl;
          uLCDDisplay(curr_angel);
 
          if (thres_over_counter >= 15) {
