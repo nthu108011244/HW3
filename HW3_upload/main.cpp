@@ -58,10 +58,11 @@ uint8_t tensor_arena[kTensorArenaSize];
 int16_t acc_data_XYZ[3] = {0};
 
 ////////////////////////////////////////////////////////////
-/* thres angle */
+/* thres angel */
 #define thres_angle_mode_max 3
 int thres_angle_mode = 0;
 int thres_angle_table[thres_angle_mode_max] = {30, 45, 60};
+int thres_over_counter = 0;
 
 void readRPCCommand();
 void uLCDInit();
@@ -114,9 +115,16 @@ void uLCDDisplay(double inform) {
       uLCD.printf("%d", int(inform));
    }
    else if (if_detection_mode) {
+      int count = thres_over_counter;
       uLCD.color(BLUE);
       uLCD.locate(1, 2);
-      uLCD.printf("%3.1lf", inform);
+      uLCD.printf("%2d", int(inform));
+      uLCD.color(RED);
+      uLCD.locate(1, 3);
+      uLCD.printf("%d", count);
+   }
+   else {
+      uLCDInit();
    }
 }
 void gestureMode() {
@@ -124,6 +132,7 @@ void gestureMode() {
       if (if_gesture_mode) {
          if_detection_mode = 0;
          uLCDInit();
+         uLCDDisplay(thres_angle_table[thres_angle_mode]);
          gestureMode_gestureVerify();
       }
    }
@@ -132,6 +141,7 @@ void detectionMode() {
    bool acc_init = 0;
    double acc_stanZ = 0;
    double curr_angel;
+   
 
    while (1) {
       if (if_detection_mode) {
@@ -141,6 +151,7 @@ void detectionMode() {
             acc_init = 1;
             uLCDInit();
             BSP_ACCELERO_Init();
+            thres_over_counter = 0;
             for (int i = 1; i <= 10; i++) {
                BSP_ACCELERO_AccGetXYZ(acc_data_XYZ);
                acc_stanZ += acc_data_XYZ[2];
@@ -150,12 +161,20 @@ void detectionMode() {
 
          BSP_ACCELERO_AccGetXYZ(acc_data_XYZ);
          curr_angel = acos(acc_data_XYZ[2] / acc_stanZ) * 180 / PI;
+         if (curr_angel >= thres_angle_table[thres_angle_mode]) thres_over_counter++;
+
+         cout << "[Tilt Angle Detection Mode]: " << curr_angel << " (over thres angel: " << thres_over_counter << " times)" << endl;
          uLCDDisplay(curr_angel);
 
-         ThisThread::sleep_for(1ms);
-      }
-      else {
-         acc_init = 0;
+         if (thres_over_counter >= 15) {
+            thres_over_counter = 0;
+            if_detection_mode = 0;
+            acc_init = 0;
+            acc_stanZ = 0;
+            uLCDInit();
+         }
+
+         ThisThread::sleep_for(10ms);
       }
    }
 }
@@ -256,17 +275,17 @@ void gestureMode_gestureVerify() {
     // Clear the buffer next time we read data
     should_clear_buffer = gesture_index < label_num;
       
-      //change thres angle
+      //change thres angel
       if (gesture_index == 0) {
          if (thres_angle_mode < thres_angle_mode_max - 1) thres_angle_mode++;
          else thres_angle_mode = thres_angle_mode_max - 1;
-         cout << thres_angle_mode << endl;
+         cout << "[Gesture UI Mode]: threshold angel = " << thres_angle_table[thres_angle_mode];
          uLCDDisplay(thres_angle_table[thres_angle_mode]);
       }
       else if (gesture_index == 1) {
          if (thres_angle_mode > 0) thres_angle_mode--;
          else thres_angle_mode = 0;
-         cout << thres_angle_mode << endl;
+         cout << "[Gesture UI Mode]: threshold angel = " << thres_angle_table[thres_angle_mode];
          uLCDDisplay(thres_angle_table[thres_angle_mode]);
       }
       
