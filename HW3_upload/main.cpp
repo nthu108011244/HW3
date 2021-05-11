@@ -155,15 +155,17 @@ void detectionMode() {
             for (int i = 1; i <= 10; i++) {
                BSP_ACCELERO_AccGetXYZ(acc_data_XYZ);
                acc_stanZ += acc_data_XYZ[2];
+               cout << "[test]: " << acc_stanZ << " " << i << endl;
             }
             acc_stanZ /= 10;
+            cout << "[test]: " << acc_stanZ << endl;
          }
 
          BSP_ACCELERO_AccGetXYZ(acc_data_XYZ);
          curr_angel = acos(acc_data_XYZ[2] / acc_stanZ) * 180 / PI;
          if (curr_angel >= thres_angle_table[thres_angle_mode]) thres_over_counter++;
-
-         cout << "[Tilt Angle Detection Mode]: " << curr_angel << " (over thres angel: " << thres_over_counter << " times)" << endl;
+         
+         //cout << "[Tilt Angle Detection Mode]: " << curr_angel << " (over thres angel: " << thres_over_counter << " times)" << endl;
          uLCDDisplay(curr_angel);
 
          if (thres_over_counter >= 15) {
