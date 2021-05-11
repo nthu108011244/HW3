@@ -31,12 +31,14 @@ using namespace std;
 Thread gesture_thread;
 Thread detection_thread;
 Thread mqtt_thread(osPriorityHigh);
+Thread publish_thread;
 
 ////////////////////////////////////////////////////////////
 /* Global EventQueue */
 EventQueue gesture_queue;
 EventQueue detection_queue;
 EventQueue mqtt_queue;
+EventQueue publish_queue;
 
 ////////////////////////////////////////////////////////////
 /* RPC variable */
@@ -63,9 +65,13 @@ uint8_t tensor_arena[kTensorArenaSize];
 int16_t acc_data_XYZ[3] = {0};
 
 ////////////////////////////////////////////////////////////
-/* accelerometer variable */
+/* MQTT variable */
 WiFiInterface *wifi;
-InterruptIn btn2(USER_BUTTON);
+InterruptIn btn(USER_BUTTON);
+volatile int message_num = 0;
+volatile int arrivedcount = 0;
+volatile bool closed = false;
+const char* topic = "Mbed";
 
 ////////////////////////////////////////////////////////////
 /* thres angel */
@@ -77,6 +83,10 @@ int thres_over_counter = 0;
 void readRPCCommand();
 void uLCDInit();
 void uLCDDisplay(double inform);
+void publish_MQTT();
+void publish_message(MQTT::Client<MQTTNetwork, Countdown>* client);
+void messageArrived(MQTT::MessageData& md);
+void close_mqtt();
 void gestureMode();
 void gestureMode_gestureVerify();
 int  PredictGesture(float* output);
@@ -85,8 +95,10 @@ void detectionMode();
 int main() {
    gesture_queue.call(&gestureMode);
    detection_queue.call(&detectionMode);
+   publish_queue.call(&publish_MQTT);
    gesture_thread.start(callback(&gesture_queue, &EventQueue::dispatch_forever));
    detection_thread.start(callback(&detection_queue, &EventQueue::dispatch_forever));
+   publish_thread.start(callback(&publish_queue, &EventQueue::dispatch_forever));
    readRPCCommand();
 }
 
@@ -187,6 +199,88 @@ void detectionMode() {
          ThisThread::sleep_for(10ms);
       }
    }
+}
+void publish_MQTT()  {
+    wifi = WiFiInterface::get_default_instance();
+    if (!wifi) {
+        ("ERROR: No WiFiInterface found.\r\n");
+            return;
+    }
+    printf("\nConnecting to %s...\r\n", MBED_CONF_APP_WIFI_SSID);
+    int ret = wifi->connect(MBED_CONF_APP_WIFI_SSID, MBED_CONF_APP_WIFI_PASSWORD, NSAPI_SECURITY_WPA_WPA2);
+    if (ret != 0) {
+            printf("\nConnection error: %d\r\n", ret);
+            return;
+    }
+    NetworkInterface* net = wifi;
+    MQTTNetwork mqttNetwork(net);
+    MQTT::Client<MQTTNetwork, Countdown> client(mqttNetwork);
+
+    //TODO: revise host to your IP
+    const char* host = "192.168.31.205";
+    printf("Connecting to TCP network...\r\n");
+
+    SocketAddress sockAddr;
+    sockAddr.set_ip_address(host);
+    sockAddr.set_port(1883);
+    printf("address is %s/%d\r\n", (sockAddr.get_ip_address() ? sockAddr.get_ip_address() : "None"),  (sockAddr.get_port() ? sockAddr.get_port() : 0) ); //check setting
+    int rc = mqttNetwork.connect(sockAddr);//(host, 1883);
+    if (rc != 0) {
+            printf("Connection error.");
+            return;
+    }
+    printf("Successfully connected!\r\n");
+    MQTTPacket_connectData data = MQTTPacket_connectData_initializer;
+    data.MQTTVersion = 3;
+    data.clientID.cstring = "Mbed";
+    if ((rc = client.connect(data)) != 0){
+            printf("Fail to connect MQTT\r\n");
+    }
+    if (client.subscribe(topic, MQTT::QOS0, messageArrived) != 0){
+            printf("Fail to subscribe\r\n");
+    }
+
+    mqtt_thread.start(callback(&mqtt_queue, &EventQueue::dispatch_forever));
+    btn.rise(mqtt_queue.event(&publish_message, &client));
+
+    int num = 0;
+    while (num != 5) {
+            client.yield(100);
+            ++num;
+    }
+
+    while (1) {
+            if (closed) break;
+            client.yield(500);
+            ThisThread::sleep_for(500ms);
+    }
+
+    printf("Ready to close MQTT Network......\n");
+    if ((rc = client.unsubscribe(topic)) != 0) {
+            printf("Failed: rc from unsubscribe was %d\n", rc);
+    }
+    if ((rc = client.disconnect()) != 0) {
+    printf("Failed: rc from disconnect was %d\n", rc);
+    }
+    //mqttNetwork.disconnect();
+    //printf("Successfully closed!\n");
+}
+void publish_message(MQTT::Client<MQTTNetwork, Countdown>* client) {
+    MQTT::Message message;
+    char buff[100];
+    if (if_gesture_mode) sprintf(buff, "0\n");
+    else if (if_detection_mode) sprintf(buff, "%d\n", thres_over_counter);
+    else sprintf(buff, "???\n");
+   
+    message.qos = MQTT::QOS0;
+    message.retained = false;
+    message.dup = false;
+    message.payload = (void*) buff;
+    message.payloadlen = strlen(buff) + 1;
+    int rc = client->publish(topic, message);
+
+    printf("rc:  %d\r\n", rc);
+    printf("Puslish message: %s\r\n", buff);
 }
 void gestureMode_gestureVerify() {
    // Whether we should clear the buffer next time we fetch data
@@ -306,6 +400,20 @@ void gestureMode_gestureVerify() {
 
       
   }
+}
+void messageArrived(MQTT::MessageData& md) {
+    MQTT::Message &message = md.message;
+    char msg[300];
+    sprintf(msg, "Message arrived: QoS%d, retained %d, dup %d, packetID %d\r\n", message.qos, message.retained, message.dup, message.id);
+    //printf(msg);
+    ThisThread::sleep_for(1000ms);
+    char payload[300];
+    sprintf(payload, "Payload %.*s\r\n", message.payloadlen, (char*)message.payload);
+    //printf(payload);
+    ++arrivedcount;
+}
+void close_mqtt() {
+    closed = true;
 }
 int PredictGesture(float* output) {
   // How many times the most recent gesture has been matched in a row
