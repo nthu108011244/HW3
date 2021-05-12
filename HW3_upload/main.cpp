@@ -100,6 +100,7 @@ int main() {
    gesture_thread.start(callback(&gesture_queue, &EventQueue::dispatch_forever));
    detection_thread.start(callback(&detection_queue, &EventQueue::dispatch_forever));
    publish_thread.start(callback(&publish_queue, &EventQueue::dispatch_forever));
+    uLCDDisplay(0);
    readRPCCommand();
 }
 
@@ -134,20 +135,25 @@ void uLCDInit() {
 void uLCDDisplay(double inform) {
    if (if_gesture_mode) {
       uLCD.color(GREEN);
-      uLCD.locate(1, 1);
+      uLCD.locate(2, 2);
       uLCD.printf("%d", int(inform));
    }
    else if (if_detection_mode) {
       int count = thres_over_counter;
       uLCD.color(BLUE);
-      uLCD.locate(1, 2);
+      uLCD.locate(2, 2);
       uLCD.printf("%2d", int(inform));
       uLCD.color(RED);
-      uLCD.locate(1, 3);
-      uLCD.printf("%d", count);
+      uLCD.locate(2, 3);
+      uLCD.printf("%2d", count);
    }
    else {
       uLCDInit();
+      uLCD.color(WHITE);
+      uLCD.locate(1, 2);
+      uLCD.printf("RPC");
+      uLCD.locate(1, 3);
+      uLCD.printf("loop");
    }
 }
 void gestureMode() {
@@ -285,12 +291,12 @@ void publish_message(MQTT::Client<MQTTNetwork, Countdown>* client) {
     MQTT::Message message;
     char buff[100];
     if (if_gesture_mode) {
-       sprintf(buff, "%d\r\n", thres_angle_table[thres_angle_mode]);
+       sprintf(buff, "%d (thres angel)\r\n", thres_angle_table[thres_angle_mode]);
        if_gesture_mode = 0;
        uLCDDisplay(0);
     }
     else if (if_detection_mode) {
-       sprintf(buff, "%d\r\n", thres_over_counter);
+       sprintf(buff, "%d (overtilt times)\r\n", thres_over_counter);
     }
     else {
        sprintf(buff, "???\r\n");
