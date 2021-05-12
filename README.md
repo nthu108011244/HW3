@@ -70,6 +70,10 @@ void gestureMode();
 ## Tilt Angel Detection Mode
 ```bash
 #define thres_angle_mode_max 3
+
+Thread detection_thread;
+EventQueue detection_queue;
+
 int thres_angle_mode = 0;
 int thres_angle_table[thres_angle_mode_max] = {30, 45, 60};
 int thres_over_counter = 0;
