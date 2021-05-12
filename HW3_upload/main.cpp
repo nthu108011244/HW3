@@ -67,11 +67,12 @@ int16_t acc_data_XYZ[3] = {0};
 ////////////////////////////////////////////////////////////
 /* MQTT variable */
 WiFiInterface *wifi;
-InterruptIn btn(USER_BUTTON);
+InterruptIn btn2(USER_BUTTON);
 volatile int message_num = 0;
 volatile int arrivedcount = 0;
 volatile bool closed = false;
 const char* topic = "Mbed";
+MQTT::Client<MQTTNetwork, Countdown> *global_client;
 
 ////////////////////////////////////////////////////////////
 /* thres angel */
@@ -162,8 +163,7 @@ void gestureMode() {
 void detectionMode() {
    bool acc_init = 0;
    double acc_stanZ = 0;
-   double curr_angel;
-   
+   double curr_angel;   
 
    while (1) {
       if (if_detection_mode) {
@@ -183,7 +183,10 @@ void detectionMode() {
 
          BSP_ACCELERO_AccGetXYZ(acc_data_XYZ);
          curr_angel = acos(acc_data_XYZ[2] / acc_stanZ) * 180 / PI;
-         if (curr_angel >= thres_angle_table[thres_angle_mode]) thres_over_counter++;
+         if (curr_angel >= thres_angle_table[thres_angle_mode]) {
+            thres_over_counter++;
+            publish_message(global_client);
+         }
          
          cout << "[Tilt Angle Detection Mode]: " << curr_angel << " (over thres angel: " << thres_over_counter << " times)" << endl;
          uLCDDisplay(curr_angel);
@@ -203,18 +206,23 @@ void detectionMode() {
 void publish_MQTT()  {
     wifi = WiFiInterface::get_default_instance();
     if (!wifi) {
-        ("ERROR: No WiFiInterface found.\r\n");
+            printf("ERROR: No WiFiInterface found.\r\n");
             return;
     }
+
+
     printf("\nConnecting to %s...\r\n", MBED_CONF_APP_WIFI_SSID);
     int ret = wifi->connect(MBED_CONF_APP_WIFI_SSID, MBED_CONF_APP_WIFI_PASSWORD, NSAPI_SECURITY_WPA_WPA2);
     if (ret != 0) {
             printf("\nConnection error: %d\r\n", ret);
             return;
     }
+
+
     NetworkInterface* net = wifi;
     MQTTNetwork mqttNetwork(net);
     MQTT::Client<MQTTNetwork, Countdown> client(mqttNetwork);
+    global_client = &client;
 
     //TODO: revise host to your IP
     const char* host = "192.168.31.205";
@@ -223,16 +231,20 @@ void publish_MQTT()  {
     SocketAddress sockAddr;
     sockAddr.set_ip_address(host);
     sockAddr.set_port(1883);
+
     printf("address is %s/%d\r\n", (sockAddr.get_ip_address() ? sockAddr.get_ip_address() : "None"),  (sockAddr.get_port() ? sockAddr.get_port() : 0) ); //check setting
+
     int rc = mqttNetwork.connect(sockAddr);//(host, 1883);
     if (rc != 0) {
             printf("Connection error.");
             return;
     }
     printf("Successfully connected!\r\n");
+
     MQTTPacket_connectData data = MQTTPacket_connectData_initializer;
     data.MQTTVersion = 3;
     data.clientID.cstring = "Mbed";
+
     if ((rc = client.connect(data)) != 0){
             printf("Fail to connect MQTT\r\n");
     }
@@ -241,7 +253,8 @@ void publish_MQTT()  {
     }
 
     mqtt_thread.start(callback(&mqtt_queue, &EventQueue::dispatch_forever));
-    btn.rise(mqtt_queue.event(&publish_message, &client));
+    btn2.rise(mqtt_queue.event(&publish_message, &client));
+    //btn3.rise(&close_mqtt);
 
     int num = 0;
     while (num != 5) {
@@ -256,21 +269,32 @@ void publish_MQTT()  {
     }
 
     printf("Ready to close MQTT Network......\n");
+
     if ((rc = client.unsubscribe(topic)) != 0) {
             printf("Failed: rc from unsubscribe was %d\n", rc);
     }
     if ((rc = client.disconnect()) != 0) {
     printf("Failed: rc from disconnect was %d\n", rc);
     }
+    
     //mqttNetwork.disconnect();
     //printf("Successfully closed!\n");
+    return;
 }
 void publish_message(MQTT::Client<MQTTNetwork, Countdown>* client) {
     MQTT::Message message;
     char buff[100];
-    if (if_gesture_mode) sprintf(buff, "0\n");
-    else if (if_detection_mode) sprintf(buff, "%d\n", thres_over_counter);
-    else sprintf(buff, "???\n");
+    if (if_gesture_mode) {
+       sprintf(buff, "%d\r\n", thres_angle_table[thres_angle_mode]);
+       if_gesture_mode = 0;
+       uLCDDisplay(0);
+    }
+    else if (if_detection_mode) {
+       sprintf(buff, "%d\r\n", thres_over_counter);
+    }
+    else {
+       sprintf(buff, "???\r\n");
+    }
    
     message.qos = MQTT::QOS0;
     message.retained = false;
@@ -405,11 +429,11 @@ void messageArrived(MQTT::MessageData& md) {
     MQTT::Message &message = md.message;
     char msg[300];
     sprintf(msg, "Message arrived: QoS%d, retained %d, dup %d, packetID %d\r\n", message.qos, message.retained, message.dup, message.id);
-    //printf(msg);
+    printf(msg);
     ThisThread::sleep_for(1000ms);
     char payload[300];
     sprintf(payload, "Payload %.*s\r\n", message.payloadlen, (char*)message.payload);
-    //printf(payload);
+    printf(payload);
     ++arrivedcount;
 }
 void close_mqtt() {
