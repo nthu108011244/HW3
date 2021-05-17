@@ -214,14 +214,12 @@ void publish_MQTT()  {
             return;
     }
 
-
     printf("\nConnecting to %s...\r\n", MBED_CONF_APP_WIFI_SSID);
     int ret = wifi->connect(MBED_CONF_APP_WIFI_SSID, MBED_CONF_APP_WIFI_PASSWORD, NSAPI_SECURITY_WPA_WPA2);
     if (ret != 0) {
             printf("\nConnection error: %d\r\n", ret);
             return;
     }
-
 
     NetworkInterface* net = wifi;
     MQTTNetwork mqttNetwork(net);
@@ -425,8 +423,6 @@ void gestureMode_gestureVerify() {
     if (gesture_index < label_num) {
       error_reporter->Report(config.output_message[gesture_index]);
     }
-
-      
   }
 }
 void messageArrived(MQTT::MessageData& md) {
