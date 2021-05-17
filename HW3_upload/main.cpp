@@ -197,18 +197,13 @@ void detectionMode() {
          cout << "[Tilt Angle Detection Mode]: " << curr_angel << " (over thres angel: " << thres_over_counter << " times)" << endl;
          uLCDDisplay(curr_angel);
 
-         if (thres_over_counter >= 9) {
-            thres_over_counter = 0;
-            if_detection_mode = 0;
-            acc_init = 0;
-            acc_stanZ = 0;
-            uLCDDisplay();
-         }
-
          ThisThread::sleep_for(10ms);
       }
       else {
          acc_init = 0;
+         thres_over_counter = 0;
+         acc_stanZ = 0;
+         uLCDDisplay(0);
       }
    }
 }
@@ -438,11 +433,11 @@ void messageArrived(MQTT::MessageData& md) {
     MQTT::Message &message = md.message;
     char msg[300];
     sprintf(msg, "Message arrived: QoS%d, retained %d, dup %d, packetID %d\r\n", message.qos, message.retained, message.dup, message.id);
-    printf(msg);
+    //printf(msg);
     ThisThread::sleep_for(1000ms);
     char payload[300];
     sprintf(payload, "Payload %.*s\r\n", message.payloadlen, (char*)message.payload);
-    printf(payload);
+    //printf(payload);
     ++arrivedcount;
 }
 void close_mqtt() {
